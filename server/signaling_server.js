@@ -1,4 +1,5 @@
 const http = require('http');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
@@ -29,14 +30,12 @@ function serveStatic(req, res) {
   let urlPath = req.url.split('?')[0];
   let filePath = path.join(STATIC_DIR, urlPath === '/' ? 'index.html' : urlPath);
 
-  // Prevent directory traversal
   if (!filePath.startsWith(STATIC_DIR)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
   }
 
-  // SPA fallback
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     filePath = path.join(STATIC_DIR, 'index.html');
   }
@@ -54,11 +53,43 @@ function serveStatic(req, res) {
   }
 }
 
+// --- Rate limiter ---
+// IP単位で join_room の試行回数を制限（ブルートフォース防止）
+const rateLimits = new Map(); // ip -> { count, resetAt }
+const RATE_LIMIT_MAX = 5;          // 最大試行回数
+const RATE_LIMIT_WINDOW_MS = 60000; // 1分間
+
+function isRateLimited(ip) {
+  const now = Date.now();
+  let entry = rateLimits.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    rateLimits.set(ip, entry);
+  }
+
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
+// 古いエントリを定期削除
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimits) {
+    if (now > entry.resetAt) rateLimits.delete(ip);
+  }
+}, 60000);
+
 // --- Room management ---
 const rooms = new Map();
 
 function generateRoomId() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  // 英数字12桁（約62^12 = 3.2×10^21 通り、推測不可能）
+  return crypto.randomBytes(9).toString('base64url').slice(0, 12);
+}
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
 }
 
 function cleanupRoom(roomId) {
@@ -71,7 +102,7 @@ function cleanupRoom(roomId) {
       try { room.viewer.close(); } catch (_) {}
     }
     rooms.delete(roomId);
-    console.log(`[Room ${roomId}] Cleaned up`);
+    console.log(`[Room ${roomId.slice(0, 4)}...] Cleaned up`);
   }
 }
 
@@ -79,9 +110,14 @@ function cleanupRoom(roomId) {
 const server = http.createServer(serveStatic);
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   let currentRoom = null;
   let role = null;
+
+  // クライアントIPを取得（プロキシ対応）
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+           || req.socket.remoteAddress
+           || 'unknown';
 
   ws.on('message', (raw) => {
     let msg;
@@ -93,27 +129,58 @@ wss.on('connection', (ws) => {
     }
 
     switch (msg.type) {
+      // カメラがルームを作成（パスワード必須）
       case 'create_room': {
+        const password = msg.password;
+        if (!password || password.length < 4) {
+          ws.send(JSON.stringify({ type: 'error', message: 'パスワードは4文字以上で設定してください' }));
+          return;
+        }
+
         const roomId = generateRoomId();
-        rooms.set(roomId, { camera: ws, viewer: null });
+        rooms.set(roomId, {
+          camera: ws,
+          viewer: null,
+          passwordHash: hashPassword(password),
+        });
         currentRoom = roomId;
         role = 'camera';
         ws.send(JSON.stringify({ type: 'room_created', roomId }));
-        console.log(`[Room ${roomId}] Created by camera`);
+        console.log(`[Room ${roomId.slice(0, 4)}...] Created by camera`);
         break;
       }
 
+      // ビューワーがルームに参加（パスワード検証 + レート制限）
       case 'join_room': {
+        // レート制限チェック
+        if (isRateLimited(ip)) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: '試行回数が多すぎます。1分後に再試行してください',
+          }));
+          console.log(`[Rate limit] ${ip} blocked`);
+          return;
+        }
+
         const roomId = msg.roomId;
+        const password = msg.password;
         const room = rooms.get(roomId);
+
         if (!room) {
-          ws.send(JSON.stringify({ type: 'error', message: 'Room not found' }));
+          ws.send(JSON.stringify({ type: 'error', message: 'ルームが見つかりません' }));
           return;
         }
         if (room.viewer) {
-          ws.send(JSON.stringify({ type: 'error', message: 'Room is full' }));
+          ws.send(JSON.stringify({ type: 'error', message: 'ルームは満員です' }));
           return;
         }
+
+        // パスワード検証
+        if (hashPassword(password || '') !== room.passwordHash) {
+          ws.send(JSON.stringify({ type: 'error', message: 'パスワードが間違っています' }));
+          return;
+        }
+
         room.viewer = ws;
         currentRoom = roomId;
         role = 'viewer';
@@ -121,7 +188,7 @@ wss.on('connection', (ws) => {
         if (room.camera && room.camera.readyState === 1) {
           room.camera.send(JSON.stringify({ type: 'viewer_connected' }));
         }
-        console.log(`[Room ${roomId}] Viewer joined`);
+        console.log(`[Room ${roomId.slice(0, 4)}...] Viewer joined`);
         break;
       }
 
@@ -173,7 +240,6 @@ wss.on('connection', (ws) => {
         cleanupRoom(currentRoom);
       }
     }
-    console.log(`Client disconnected (role: ${role}, room: ${currentRoom})`);
   });
 
   ws.on('error', (err) => {
@@ -181,7 +247,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Periodic log of active rooms
+// Periodic log
 setInterval(() => {
   if (rooms.size > 0) {
     console.log(`Active rooms: ${rooms.size}`);
@@ -192,7 +258,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('============================================');
   console.log('  ココ丸ちゃんねる サーバー起動');
   console.log(`  http://localhost:${PORT}`);
-  console.log(`  WebSocket: ws://localhost:${PORT}`);
-  console.log(`  Static: ${STATIC_DIR}`);
   console.log('============================================');
 });

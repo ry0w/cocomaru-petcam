@@ -143,16 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icons.video_camera_front,
                   title: 'カメラモード',
                   subtitle: 'お部屋に置いて撮影する',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CameraScreen(
-                          serverUrl: _serverUrlController.text,
-                        ),
-                      ),
-                    );
-                  },
+                  onTap: () => _showPasswordSetupDialog(context),
                 ),
                 const SizedBox(height: 16),
 
@@ -229,18 +220,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showRoomCodeDialog(BuildContext context) {
-    _roomCodeController.clear();
+  void _showPasswordSetupDialog(BuildContext context) {
+    final passwordController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Row(
           children: [
-            Icon(Icons.key, color: Color(0xFFFF9BAA)),
+            Icon(Icons.lock, color: Color(0xFFFF9BAA)),
             SizedBox(width: 8),
             Text(
-              'ルームコードを入力',
+              'パスワードを設定',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -253,30 +244,22 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'カメラ画面に表示されている6桁のコードを入力してください',
+              'ビューワーが接続する際に必要なパスワードを設定してください（4文字以上）',
               style: TextStyle(fontSize: 13, color: Color(0xFFA69089)),
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _roomCodeController,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              textAlign: TextAlign.center,
+              controller: passwordController,
+              obscureText: true,
               style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 8,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
                 color: Color(0xFF8B736B),
               ),
               decoration: InputDecoration(
-                counterText: '',
-                hintText: '000000',
-                hintStyle: TextStyle(
-                  color: const Color(0xFF8B736B).withOpacity(0.3),
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 8,
-                ),
+                hintText: 'パスワード',
+                prefixIcon: const Icon(Icons.lock_outline,
+                    color: Color(0xFFA69089), size: 20),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
                   borderSide: const BorderSide(color: Color(0xFFFFE6EB)),
@@ -301,8 +284,133 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () {
+              final pw = passwordController.text;
+              if (pw.length >= 4) {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CameraScreen(
+                      serverUrl: _serverUrlController.text,
+                      password: pw,
+                    ),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF9BAA),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text(
+              '配信開始',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRoomCodeDialog(BuildContext context) {
+    _roomCodeController.clear();
+    final passwordController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Row(
+          children: [
+            Icon(Icons.key, color: Color(0xFFFF9BAA)),
+            SizedBox(width: 8),
+            Text(
+              'ルームに接続',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF8B736B),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'カメラ画面に表示されているルームコードとパスワードを入力してください',
+              style: TextStyle(fontSize: 13, color: Color(0xFFA69089)),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _roomCodeController,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                color: Color(0xFF8B736B),
+              ),
+              decoration: InputDecoration(
+                labelText: 'ルームコード',
+                hintText: 'abc123def456',
+                prefixIcon: const Icon(Icons.meeting_room,
+                    color: Color(0xFFA69089), size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFFFE6EB)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: Color(0xFFFF9BAA), width: 2),
+                ),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF8B736B),
+              ),
+              decoration: InputDecoration(
+                labelText: 'パスワード',
+                prefixIcon: const Icon(Icons.lock_outline,
+                    color: Color(0xFFA69089), size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFFFE6EB)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: Color(0xFFFF9BAA), width: 2),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'キャンセル',
+              style: TextStyle(color: Color(0xFFA69089)),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
               final code = _roomCodeController.text.trim();
-              if (code.length == 6) {
+              final pw = passwordController.text;
+              if (code.isNotEmpty && pw.isNotEmpty) {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
@@ -310,6 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     builder: (context) => ViewerScreen(
                       roomId: code,
                       serverUrl: _serverUrlController.text,
+                      password: pw,
                     ),
                   ),
                 );

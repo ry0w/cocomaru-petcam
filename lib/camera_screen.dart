@@ -5,8 +5,9 @@ import 'services/signaling_service.dart';
 
 class CameraScreen extends StatefulWidget {
   final String serverUrl;
+  final String password;
 
-  const CameraScreen({super.key, required this.serverUrl});
+  const CameraScreen({super.key, required this.serverUrl, required this.password});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -69,7 +70,7 @@ class _CameraScreenState extends State<CameraScreen> {
     try {
       await _signaling.connect(serverUrl: widget.serverUrl);
       _listenToSignaling();
-      _signaling.createRoom();
+      _signaling.createRoom(password: widget.password);
       setState(() => _status = 'ルームを作成中...');
     } catch (e) {
       debugPrint('シグナリング接続失敗: $e');

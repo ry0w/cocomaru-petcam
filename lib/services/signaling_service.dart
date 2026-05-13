@@ -68,14 +68,14 @@ class SignalingService {
     }
   }
 
-  /// ルームを作成（カメラ側）
-  void createRoom() {
-    send({'type': 'create_room'});
+  /// ルームを作成（カメラ側、パスワード必須）
+  void createRoom({required String password}) {
+    send({'type': 'create_room', 'password': password});
   }
 
-  /// ルームに参加（ビューワー側）
-  void joinRoom(String roomId) {
-    send({'type': 'join_room', 'roomId': roomId});
+  /// ルームに参加（ビューワー側、パスワード必須）
+  void joinRoom(String roomId, {required String password}) {
+    send({'type': 'join_room', 'roomId': roomId, 'password': password});
   }
 
   /// WebRTC Offer を送信

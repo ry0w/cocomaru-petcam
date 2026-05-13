@@ -6,11 +6,13 @@ import 'services/signaling_service.dart';
 class ViewerScreen extends StatefulWidget {
   final String roomId;
   final String serverUrl;
+  final String password;
 
   const ViewerScreen({
     super.key,
     required this.roomId,
     required this.serverUrl,
+    required this.password,
   });
 
   @override
@@ -48,7 +50,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     try {
       await _signaling.connect(serverUrl: widget.serverUrl);
       _listenToSignaling();
-      _signaling.joinRoom(widget.roomId);
+      _signaling.joinRoom(widget.roomId, password: widget.password);
       setState(() => _status = 'ルームに参加中...');
     } catch (e) {
       debugPrint('シグナリング接続失敗: $e');
