@@ -1,0 +1,10 @@
+build/
+.dart_tool/
+.idea/
+.pub-cache/
+.pub/
+server/node_modules/
+server/certs/
+*.iml
+.metadata
+.flutter-plugins-dependencies
