@@ -108,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Center(
                     child: ClipOval(
                       child: Image.asset(
-                        'images/coco.jpg',
+                        'assets/images/coco.jpg',
                         width: 138,
                         height: 138,
                         fit: BoxFit.cover,
