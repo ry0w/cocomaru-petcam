@@ -1,5 +1,5 @@
 # ---- Stage 1: Flutter Web Build ----
-FROM ghcr.io/cirruslabs/flutter:3.32.1 AS flutter-build
+FROM ghcr.io/cirruslabs/flutter:3.41.4 AS flutter-build
 WORKDIR /app
 COPY pubspec.yaml pubspec.lock ./
 RUN flutter pub get
