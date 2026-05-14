@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'services/signaling_service.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -13,7 +14,8 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenState extends State<CameraScreen>
+    with TickerProviderStateMixin {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final SignalingService _signaling = SignalingService();
   RTCPeerConnection? _peerConnection;
@@ -25,7 +27,10 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isViewerConnected = false;
   String _status = 'カメラを起動中...';
 
-  // STUN/TURNサーバー設定
+  // Animations
+  late final AnimationController _pulseController;
+  late final AnimationController _qrFadeController;
+
   final Map<String, dynamic> _iceServers = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
@@ -36,6 +41,17 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+
+    _qrFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
     _init();
   }
 
@@ -50,7 +66,7 @@ class _CameraScreenState extends State<CameraScreen> {
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
         'video': {
-          'facingMode': 'environment', // 背面カメラ（ペット撮影用）
+          'facingMode': 'environment',
           'width': {'ideal': 1280},
           'height': {'ideal': 720},
         },
@@ -86,6 +102,7 @@ class _CameraScreenState extends State<CameraScreen> {
             _roomId = msg['roomId'] as String;
             _status = 'ビューワーの接続を待っています';
           });
+          _qrFadeController.forward();
           break;
 
         case 'viewer_connected':
@@ -102,7 +119,7 @@ class _CameraScreenState extends State<CameraScreen> {
           await _peerConnection?.setRemoteDescription(
             RTCSessionDescription(sdp['sdp'], sdp['type']),
           );
-          setState(() => _status = '配信中 🐾');
+          setState(() => _status = '配信中');
           break;
 
         case 'candidate':
@@ -135,12 +152,10 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void> _createPeerConnection() async {
     _peerConnection = await createPeerConnection(_iceServers);
 
-    // ローカルストリームのトラックを追加
     _localStream?.getTracks().forEach((track) {
       _peerConnection!.addTrack(track, _localStream!);
     });
 
-    // ICE候補をシグナリングサーバー経由で送信
     _peerConnection!.onIceCandidate = (candidate) {
       _signaling.sendCandidate({
         'candidate': candidate.candidate,
@@ -152,7 +167,7 @@ class _CameraScreenState extends State<CameraScreen> {
     _peerConnection!.onIceConnectionState = (state) {
       debugPrint('ICE接続状態: $state');
       if (state == RTCIceConnectionState.RTCIceConnectionStateConnected) {
-        setState(() => _status = '配信中 🐾');
+        setState(() => _status = '配信中');
       } else if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
         setState(() => _status = '接続に失敗しました');
       }
@@ -175,6 +190,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   void dispose() {
+    _pulseController.dispose();
+    _qrFadeController.dispose();
     _signalingSubscription?.cancel();
     _peerConnection?.close();
     _localStream?.getTracks().forEach((track) => track.stop());
@@ -190,7 +207,7 @@ class _CameraScreenState extends State<CameraScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text(
-          'ココ丸ちゃんねる (カメラ)',
+          'ココ丸ちゃんねる',
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: const Color(0xFFFF9BAA),
@@ -199,14 +216,14 @@ class _CameraScreenState extends State<CameraScreen> {
       ),
       body: Stack(
         children: [
-          // カメラプレビュー
+          // Camera preview
           Center(
             child: _isCameraReady
                 ? RTCVideoView(_localRenderer)
                 : const CircularProgressIndicator(color: Color(0xFFFF9BAA)),
           ),
 
-          // ステータスオーバーレイ
+          // Status overlay
           Positioned(
             top: 0,
             left: 0,
@@ -218,7 +235,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.6),
+                    Colors.black.withOpacity(0.7),
                     Colors.transparent,
                   ],
                 ),
@@ -226,65 +243,127 @@ class _CameraScreenState extends State<CameraScreen> {
               child: SafeArea(
                 child: Column(
                   children: [
-                    // ステータス表示
+                    // Status with pulsing dot
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          _isViewerConnected
-                              ? Icons.videocam
-                              : Icons.wifi_tethering,
-                          color: _isViewerConnected
-                              ? Colors.greenAccent
-                              : Colors.orangeAccent,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _status,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                        if (_isViewerConnected)
+                          AnimatedBuilder(
+                            animation: _pulseController,
+                            builder: (_, __) => Container(
+                              width: 10,
+                              height: 10,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.redAccent.withOpacity(
+                                    0.4 + _pulseController.value * 0.6),
+                              ),
+                            ),
+                          )
+                        else
+                          Icon(
+                            Icons.wifi_tethering,
+                            color: Colors.orangeAccent,
+                            size: 18,
+                          ),
+                        if (!_isViewerConnected) const SizedBox(width: 8),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          child: Text(
+                            _status,
+                            key: ValueKey(_status),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    // ルームコード表示
-                    if (_roomId != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.key, color: Colors.white70, size: 16),
-                            const SizedBox(width: 8),
-                            Text(
-                              'ルームコード: $_roomId',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
             ),
           ),
+
+          // QR Code + Room code overlay (center)
+          if (_roomId != null && !_isViewerConnected)
+            Center(
+              child: FadeTransition(
+                opacity: _qrFadeController,
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  margin: const EdgeInsets.symmetric(horizontal: 40),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF9BAA).withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'ビューワーで読み取ってね',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFA69089),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      QrImageView(
+                        data: _roomId!,
+                        version: QrVersions.auto,
+                        size: 180,
+                        backgroundColor: Colors.white,
+                        eyeStyle: const QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
+                          color: Color(0xFFFF9BAA),
+                        ),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: Color(0xFF8B736B),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF0F5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: SelectableText(
+                          _roomId!,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 2,
+                            color: Color(0xFF8B736B),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'ルームコード（タップでコピー可）',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFA69089),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(

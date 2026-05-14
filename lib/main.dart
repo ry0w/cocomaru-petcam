@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'camera_screen.dart';
@@ -36,15 +37,46 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final _serverUrlController = TextEditingController(
     text: SignalingService.defaultServerUrl,
   );
   final _roomCodeController = TextEditingController();
   bool _showSettings = false;
 
+  // Animations
+  late final AnimationController _floatController;
+  late final AnimationController _fadeController;
+  late final AnimationController _heartController;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Avatar floating animation
+    _floatController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    )..repeat(reverse: true);
+
+    // Staggered fade-in for buttons
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..forward();
+
+    // Heart pulse
+    _heartController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
   @override
   void dispose() {
+    _floatController.dispose();
+    _fadeController.dispose();
+    _heartController.dispose();
     _serverUrlController.dispose();
     _roomCodeController.dispose();
     super.dispose();
@@ -69,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 設定ボタン
+                // Settings button
                 Align(
                   alignment: Alignment.topRight,
                   child: Padding(
@@ -77,83 +109,145 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: IconButton(
                       onPressed: () =>
                           setState(() => _showSettings = !_showSettings),
-                      icon: Icon(
-                        _showSettings ? Icons.close : Icons.settings,
-                        color: const Color(0xFFA69089),
+                      icon: AnimatedRotation(
+                        turns: _showSettings ? 0.25 : 0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Icon(
+                          _showSettings ? Icons.close : Icons.settings,
+                          color: const Color(0xFFA69089),
+                        ),
                       ),
                     ),
                   ),
                 ),
 
-                // 設定パネル
-                if (_showSettings) _buildSettingsPanel(),
+                // Settings panel with animation
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  child: _showSettings ? _buildSettingsPanel() : const SizedBox.shrink(),
+                ),
 
-                // アバター
-                Container(
-                  width: 150,
-                  height: 150,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFF9BAA).withOpacity(0.3),
-                        blurRadius: 24,
-                        spreadRadius: 6,
-                        offset: const Offset(0, 12),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/coco.jpg',
-                        width: 138,
-                        height: 138,
-                        fit: BoxFit.cover,
+                // Floating avatar
+                AnimatedBuilder(
+                  animation: _floatController,
+                  builder: (context, child) {
+                    final dy = sin(_floatController.value * pi) * 10;
+                    return Transform.translate(
+                      offset: Offset(0, -dy),
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    width: 150,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 6),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF9BAA).withOpacity(0.3),
+                          blurRadius: 24,
+                          spreadRadius: 6,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/coco.jpg',
+                          width: 138,
+                          height: 138,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Text(
-                  'ココ丸ちゃんねる',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF8B736B),
-                    letterSpacing: 1.2,
+
+                // Title fade-in
+                FadeTransition(
+                  opacity: CurvedAnimation(
+                    parent: _fadeController,
+                    curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+                  ),
+                  child: const Text(
+                    'ココ丸ちゃんねる',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF8B736B),
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'お留守番中のココを見守るよ',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFA69089),
+                FadeTransition(
+                  opacity: CurvedAnimation(
+                    parent: _fadeController,
+                    curve: const Interval(0.2, 0.6, curve: Curves.easeOut),
+                  ),
+                  child: const Text(
+                    'お留守番中のココを見守るよ',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFA69089),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 48),
 
-                // カメラモードボタン
-                _buildModeButton(
-                  context,
-                  icon: Icons.video_camera_front,
-                  title: 'カメラモード',
-                  subtitle: 'お部屋に置いて撮影する',
-                  onTap: () => _showPasswordSetupDialog(context),
+                // Camera button - staggered slide + fade
+                SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.3),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: _fadeController,
+                    curve: const Interval(0.3, 0.8, curve: Curves.easeOut),
+                  )),
+                  child: FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: _fadeController,
+                      curve: const Interval(0.3, 0.8, curve: Curves.easeOut),
+                    ),
+                    child: _buildModeButton(
+                      context,
+                      icon: Icons.video_camera_front,
+                      title: 'カメラモード',
+                      subtitle: 'お部屋に置いて撮影する',
+                      onTap: () => _showPasswordSetupDialog(context),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
 
-                // ビュワーモードボタン
-                _buildModeButton(
-                  context,
-                  icon: Icons.visibility,
-                  title: 'ビュワーモード',
-                  subtitle: '外出先から様子を見る',
-                  onTap: () => _showRoomCodeDialog(context),
+                // Viewer button - staggered slide + fade
+                SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.3),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: _fadeController,
+                    curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
+                  )),
+                  child: FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: _fadeController,
+                      curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
+                    ),
+                    child: _buildModeButton(
+                      context,
+                      icon: Icons.visibility,
+                      title: 'ビュワーモード',
+                      subtitle: '外出先から様子を見る',
+                      onTap: () => _showRoomCodeDialog(context),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -277,10 +371,8 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'キャンセル',
-              style: TextStyle(color: Color(0xFFA69089)),
-            ),
+            child: const Text('キャンセル',
+                style: TextStyle(color: Color(0xFFA69089))),
           ),
           ElevatedButton(
             onPressed: () {
@@ -289,11 +381,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => CameraScreen(
+                  PageRouteBuilder(
+                    pageBuilder: (_, __, ___) => CameraScreen(
                       serverUrl: _serverUrlController.text,
                       password: pw,
                     ),
+                    transitionsBuilder: (_, animation, __, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    transitionDuration: const Duration(milliseconds: 400),
                   ),
                 );
               }
@@ -302,15 +398,12 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: const Color(0xFFFF9BAA),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+                  borderRadius: BorderRadius.circular(16)),
               padding:
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text(
-              '配信開始',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
+            child: const Text('配信開始',
+                style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -342,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'カメラ画面に表示されているルームコードとパスワードを入力してください',
+              'カメラ画面のQRコードを読み取るか、ルームコードとパスワードを入力してください',
               style: TextStyle(fontSize: 13, color: Color(0xFFA69089)),
             ),
             const SizedBox(height: 16),
@@ -357,7 +450,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               decoration: InputDecoration(
                 labelText: 'ルームコード',
-                hintText: 'abc123def456',
                 prefixIcon: const Icon(Icons.meeting_room,
                     color: Color(0xFFA69089), size: 20),
                 border: OutlineInputBorder(
@@ -401,10 +493,8 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'キャンセル',
-              style: TextStyle(color: Color(0xFFA69089)),
-            ),
+            child: const Text('キャンセル',
+                style: TextStyle(color: Color(0xFFA69089))),
           ),
           ElevatedButton(
             onPressed: () {
@@ -414,12 +504,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => ViewerScreen(
+                  PageRouteBuilder(
+                    pageBuilder: (_, __, ___) => ViewerScreen(
                       roomId: code,
                       serverUrl: _serverUrlController.text,
                       password: pw,
                     ),
+                    transitionsBuilder: (_, animation, __, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    transitionDuration: const Duration(milliseconds: 400),
                   ),
                 );
               }
@@ -428,15 +522,12 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: const Color(0xFFFF9BAA),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+                  borderRadius: BorderRadius.circular(16)),
               padding:
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text(
-              '接続する',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
+            child: const Text('接続する',
+                style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -503,7 +594,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            const Icon(Icons.favorite, color: Color(0xFFFFE6EB), size: 20),
+            // Pulsing heart
+            AnimatedBuilder(
+              animation: _heartController,
+              builder: (context, child) {
+                final scale = 1.0 + _heartController.value * 0.3;
+                return Transform.scale(scale: scale, child: child);
+              },
+              child: const Icon(Icons.favorite, color: Color(0xFFFF9BAA), size: 20),
+            ),
           ],
         ),
       ),
