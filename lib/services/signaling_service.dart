@@ -14,12 +14,14 @@ class SignalingService {
   /// サーバーURL（環境に応じて自動検出）
   static String get defaultServerUrl {
     if (kIsWeb) {
-      // ブラウザの現在のURLからWebSocket URLを自動生成
       final uri = Uri.base;
       final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
-      return '$wsScheme://${uri.host}:${uri.port}';
+      // 本番: 同一オリジン / 開発: localhost:8080
+      if (uri.port == 8080 || uri.scheme == 'https') {
+        return '$wsScheme://${uri.host}:${uri.port}';
+      }
+      return 'ws://${uri.host}:8080';
     }
-    // モバイルアプリの場合
     return 'ws://10.0.2.2:8080';
   }
 

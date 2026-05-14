@@ -1,8 +1,12 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'camera_screen.dart';
 import 'viewer_screen.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+import 'dart:js' as js;
 import 'services/signaling_service.dart';
 
 void main() {
@@ -410,6 +414,65 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  void _scanQrFromImage(TextEditingController controller) {
+    if (!kIsWeb) return;
+
+    final input = html.FileUploadInputElement()..accept = 'image/*';
+    input.click();
+
+    input.onChange.listen((event) {
+      final file = input.files?.first;
+      if (file == null) return;
+
+      final reader = html.FileReader();
+      reader.readAsDataUrl(file);
+      reader.onLoadEnd.listen((_) {
+        final dataUrl = reader.result as String;
+        final img = html.ImageElement(src: dataUrl);
+        img.onLoad.listen((_) {
+          final canvas = html.CanvasElement(
+            width: img.width,
+            height: img.height,
+          );
+          final ctx = canvas.context2D;
+          ctx.drawImage(img, 0, 0);
+          final imageData = ctx.getImageData(0, 0, img.width!, img.height!);
+
+          // Call jsQR
+          final result = js.context.callMethod('jsQR', [
+            imageData.data,
+            img.width,
+            img.height,
+          ]);
+
+          if (result != null) {
+            final data = (result as js.JsObject)['data'] as String;
+            controller.text = data;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('ルームコード読み取り完了: $data'),
+                backgroundColor: const Color(0xFFFF9BAA),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('QRコードを読み取れませんでした'),
+                backgroundColor: Colors.grey,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            );
+          }
+        });
+      });
+    });
+  }
+
   void _showRoomCodeDialog(BuildContext context) {
     _roomCodeController.clear();
     final passwordController = TextEditingController();
@@ -435,10 +498,61 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'カメラ画面のQRコードを読み取るか、ルームコードとパスワードを入力してください',
+              'QR画像を読み取るか、ルームコードを手入力してください',
               style: TextStyle(fontSize: 13, color: Color(0xFFA69089)),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            // QR読み取りボタン
+            if (kIsWeb)
+              GestureDetector(
+                onTap: () => _scanQrFromImage(_roomCodeController),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF9BAA), Color(0xFFFFB6C1)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF9BAA).withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.qr_code_scanner, color: Colors.white, size: 22),
+                      SizedBox(width: 8),
+                      Text(
+                        'QR画像から読み取り',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (kIsWeb) const SizedBox(height: 12),
+            if (kIsWeb)
+              const Row(
+                children: [
+                  Expanded(child: Divider(color: Color(0xFFFFE6EB))),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('または',
+                        style: TextStyle(fontSize: 12, color: Color(0xFFA69089))),
+                  ),
+                  Expanded(child: Divider(color: Color(0xFFFFE6EB))),
+                ],
+              ),
+            if (kIsWeb) const SizedBox(height: 12),
             TextField(
               controller: _roomCodeController,
               textAlign: TextAlign.center,
